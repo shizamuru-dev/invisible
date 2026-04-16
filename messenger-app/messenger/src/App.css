@@ -1,0 +1,72 @@
+.app-container {
+    font-family: system-ui;
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 1rem;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+header {
+    border-bottom: 1px solid #ccc;
+    margin-bottom: 1rem;
+}
+.device-info {
+    background: #f5f5f5;
+    padding: 0.5rem;
+    border-radius: 8px;
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+.recipient-area {
+    margin-bottom: 1rem;
+}
+.recipient-area input {
+    width: 100%;
+    padding: 0.5rem;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+}
+.messages-area {
+    flex: 1;
+    overflow-y: auto;
+    background: #f9f9f9;
+    border-radius: 12px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+}
+.message {
+    max-width: 70%;
+    padding: 0.5rem 1rem;
+    border-radius: 18px;
+    margin-bottom: 0.5rem;
+}
+.message.mine {
+    background: #007aff;
+    color: white;
+    align-self: flex-end;
+    text-align: right;
+}
+.message.theirs {
+    background: #e5e5ea;
+    align-self: flex-start;
+}
+.input-area {
+    display: flex;
+    gap: 0.5rem;
+}
+.input-area input {
+    flex: 1;
+    padding: 0.75rem;
+    border: 1px solid #ccc;
+    border-radius: 30px;
+}
+.input-area button {
+    padding: 0.75rem 1.5rem;
+    background: #007aff;
+    color: white;
+    border: none;
+    border-radius: 30px;
+    cursor: pointer;
+}
