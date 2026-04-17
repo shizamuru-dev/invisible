@@ -1,0 +1,51 @@
+{
+        email mmihajlov534@mail.ru
+        admin localhost:2019
+}
+# API и основной бэкенд
+invisible.glitched.network {
+        reverse_proxy localhost:3001
+}
+api.invisible.glitched.network {
+        header Access-Control-Allow-Origin "*"
+        header Access-Control-Allow-Methods "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+        header Access-Control-Allow-Headers "*"
+        @options method OPTIONS
+        respond @options 204
+        reverse_proxy localhost:3001
+}
+# Relay (WebSocket сервер)
+relay.invisible.glitched.network {
+        reverse_proxy localhost:3030
+}
+# S3 MinIO (Для загрузки/скачивания файлов)
+s3.invisible.glitched.network {
+        reverse_proxy localhost:9000
+}
+# S3 MinIO Web Console (Для панели управления)
+s3-console.invisible.glitched.network {
+        reverse_proxy localhost:9001
+}
+# ==========================================
+# Локальные алиасы для разработки
+# ==========================================
+invisible.localhost {
+        reverse_proxy localhost:3001
+}
+api.invisible.localhost {
+        header Access-Control-Allow-Origin "*"
+        header Access-Control-Allow-Methods "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+        header Access-Control-Allow-Headers "*"
+        @options method OPTIONS
+        respond @options 204
+        reverse_proxy localhost:3001
+}
+relay.invisible.localhost {
+        reverse_proxy localhost:3030
+}
+s3.invisible.localhost {
+        reverse_proxy localhost:9000
+}
+localhost {
+        reverse_proxy localhost:3001
+}
