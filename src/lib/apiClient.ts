@@ -59,18 +59,6 @@ export class ApiClient {
     static async presignFile(token: string, file_name: string, mime_type: string) {
         const query = new URLSearchParams({ file_name, mime_type }).toString();
         const result = await this.request(`/files/presign?${query}`, "GET", null, token);
-        if (result && typeof result === "object") {
-            const s3Host = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1" 
-                ? "https://s3.invisible.localhost" 
-                : "https://s3.invisible.glitched.network";
-            
-            if (result.upload_url) {
-                result.upload_url = result.upload_url.replace("http://localhost:9000", s3Host);
-            }
-            if (result.download_url) {
-                result.download_url = result.download_url.replace("http://localhost:9000", s3Host);
-            }
-        }
         return result;
     }
 
