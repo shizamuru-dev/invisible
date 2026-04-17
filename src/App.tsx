@@ -24,7 +24,10 @@ function AppContent() {
     const [messages, setMessages] = useState<Message[]>([]);
     const wsRef = useRef<WebSocket | null>(null);
     const [contacts, setContacts] = useState<Contact[]>([]);
+    const contactsRef = useRef<Contact[]>([]);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+    const recipientIdRef = useRef(recipientId);
+    useEffect(() => { recipientIdRef.current = recipientId; }, [recipientId]);
 
     useEffect(() => {
         const stored = localStorage.getItem(CONTACTS_STORAGE_KEY);
@@ -32,7 +35,13 @@ function AppContent() {
             try { setContacts(JSON.parse(stored)); } catch (e) { console.error(e); }
         }
     }, []);
-    useEffect(() => { localStorage.setItem(CONTACTS_STORAGE_KEY, JSON.stringify(contacts)); }, [contacts]);
+    useEffect(() => { 
+        localStorage.setItem(CONTACTS_STORAGE_KEY, JSON.stringify(contacts)); 
+        contactsRef.current = contacts;
+        if (wsRef.current?.readyState === 1 && contacts.length > 0) {
+            wsRef.current.send(JSON.stringify({ type: "WatchPresence", user_ids: contacts.map(c => c.id) }));
+        }
+    }, [contacts]);
 
     const initRef = useRef(false);
 
@@ -113,7 +122,13 @@ function AppContent() {
     useEffect(() => {
         if (!token || !myDeviceId) return;
         const ws = new WebSocket(`${WS_URL}?token=${token}`);
-        ws.onopen = () => console.log("WebSocket connected");
+        ws.onopen = () => {
+            console.log("WebSocket connected");
+            const currentContacts = contactsRef.current;
+            if (currentContacts.length > 0) {
+                ws.send(JSON.stringify({ type: "WatchPresence", user_ids: currentContacts.map(c => c.id) }));
+            }
+        };
         
         ws.onmessage = async (event) => {
             const data = JSON.parse(event.data);
@@ -121,45 +136,62 @@ function AppContent() {
             const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             const dateStr = now.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
 
-            if (data.type === "Text" || data.type === "Encrypted") {
-                try {
-                    let plaintext = "";
-                    if (data.type === "Text") {
-                        plaintext = data.content;
-                    } else if (data.type === "Encrypted") {
-                        // Find ciphertext for my device (we only have 1 device ID in this mock, which is 'username')
-                        // The actual device ID in the payload isn't clear, we'll try the first one that succeeds.
-                        let decrypted = null;
-                        for (const ct of data.ciphertexts) {
-                            try {
-                                const ctMsg = JSON.parse(atob(ct.ciphertext));
-                                const senderAddr = `${data.from}.${ct.device_id || 1}`; 
-                                // Actually, we don't know the exact remoteAddress format used on send. Let's assume senderId.deviceId
-                                plaintext = await E2EE.decryptMessage(senderAddr, ctMsg);
-                                decrypted = true;
-                                break;
-                            } catch (e) {
-                                // Try next ciphertext
+            if (data.type === "Text" || data.type === "Encrypted" || data.type === "File") {
+                const senderId = data.from;
+                if (senderId) {
+                    setContacts(prev => {
+                        if (!prev.some(c => c.id === senderId)) {
+                            return [...prev, { id: senderId, name: senderId, avatar: '', lastMessage: '', timestamp: '', online: true }];
+                        }
+                        return prev;
+                    });
+                }
+
+                if (data.type === "Text" || data.type === "Encrypted") {
+                    try {
+                        let plaintext = "";
+                        if (data.type === "Text") {
+                            plaintext = data.content;
+                        } else if (data.type === "Encrypted") {
+                            // Find ciphertext for my device (we only have 1 device ID in this mock, which is 'username')
+                            // The actual device ID in the payload isn't clear, we'll try the first one that succeeds.
+                            let decrypted = null;
+                            for (const ct of data.ciphertexts) {
+                                try {
+                                    const ctMsg = JSON.parse(atob(ct.ciphertext));
+                                    const senderAddr = `${data.from}.${ct.device_id || 1}`; 
+                                    // Actually, we don't know the exact remoteAddress format used on send. Let's assume senderId.deviceId
+                                    plaintext = await E2EE.decryptMessage(senderAddr, ctMsg);
+                                    decrypted = true;
+                                    break;
+                                } catch (e) {
+                                    // Try next ciphertext
+                                }
+                            }
+                            if (!decrypted) {
+                                plaintext = "[Encrypted message - Decryption Failed]";
                             }
                         }
-                        if (!decrypted) {
-                            plaintext = "[Encrypted message - Decryption Failed]";
+                        
+                        if (senderId === recipientIdRef.current) {
+                            const newMsg: Message = { id: data.id || crypto.randomUUID(), senderId: data.from || 'unknown', type: "text", content: plaintext, time: timeStr, date: dateStr };
+                            setMessages(prev => [...prev, newMsg]);
                         }
+                        
+                        // Update contact last message
+                        setContacts(prev => prev.map(c => c.id === senderId ? { ...c, lastMessage: plaintext, timestamp: timeStr } : c));
+                    } catch (e) {
+                        console.error("Failed to parse/decrypt incoming message", e);
                     }
-                    
-                    const newMsg: Message = { id: data.id || crypto.randomUUID(), senderId: data.from || 'unknown', type: "text", content: plaintext, time: timeStr, date: dateStr };
-                    setMessages(prev => [...prev, newMsg]);
-                    
-                    // Update contact last message
-                    const sender = data.from;
-                    setContacts(prev => prev.map(c => c.id === sender ? { ...c, lastMessage: plaintext, timestamp: timeStr } : c));
-                } catch (e) {
-                    console.error("Failed to parse/decrypt incoming message", e);
+                } else if (data.type === "File") {
+                    if (senderId === recipientIdRef.current) {
+                        const newMsg: Message = { id: data.id || crypto.randomUUID(), senderId: data.from || 'unknown', type: "file", fileData: { file_url: data.file_url, metadata: { name: data.file_name, type: data.mime_type, size: 0 } }, time: timeStr, date: dateStr };
+                        setMessages(prev => [...prev, newMsg]);
+                    }
+                    setContacts(prev => prev.map(c => c.id === senderId ? { ...c, lastMessage: `[File] ${data.file_name}`, timestamp: timeStr } : c));
                 }
-            } else if (data.type === "File") {
-                const newMsg: Message = { id: data.id || crypto.randomUUID(), senderId: data.from || 'unknown', type: "file", fileData: { file_url: data.file_url, metadata: { name: data.file_name, type: data.mime_type, size: 0 } }, time: timeStr, date: dateStr };
-                setMessages(prev => [...prev, newMsg]);
-                setContacts(prev => prev.map(c => c.id === data.from ? { ...c, lastMessage: `[File] ${data.file_name}`, timestamp: timeStr } : c));
+            } else if (data.type === "PresenceUpdate") {
+                setContacts(prev => prev.map(c => c.id === data.user_id ? { ...c, online: data.online } : c));
             }
         };
 
@@ -207,7 +239,7 @@ function AppContent() {
                         
                         ciphertexts.push({
                             device_id: device.device_id,
-                            type: 3,
+                            signal_type: 3,
                             ciphertext: btoa(JSON.stringify(encrypted))
                         });
                     } catch (e) {
