@@ -9,3 +9,4 @@ overview.md
 .idea
 Caddyfile
 docker-compose.yml
+session-*
