@@ -43,6 +43,10 @@ const translations: Translations = {
     uploadingFile: { ru: "Отправка файла...", en: "Uploading file..." },
     file: { ru: "Файл", en: "File" },
     download: { ru: "Скачать", en: "Download" },
+    sessionManagement: { ru: "Управление сессиями", en: "Session Management" },
+    activeSessions: { ru: "Активные сессии", en: "Active Sessions" },
+    terminateSession: { ru: "Завершить", en: "Terminate" },
+    currentSession: { ru: "Текущая", en: "Current" },
 };
 
 interface LanguageContextType {

@@ -30,4 +30,6 @@ ed25519-dalek = { version = "2.2.0", features = ["rand_core"] }
 hkdf = "0.13.0"
 hmac = "0.13.0"
 sha2 = "0.11.0"
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
 

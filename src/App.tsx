@@ -7,6 +7,8 @@ import { MessageInput } from './components/message-input';
 import { SettingsModal } from './components/SettingsModal';
 import { ThemeProvider, useTheme } from 'next-themes';
 import { LanguageProvider, useLanguage } from './contexts/LanguageContext';
+import { save } from '@tauri-apps/plugin-dialog';
+import { writeFile } from '@tauri-apps/plugin-fs';
 import { ApiClient, WS_URL } from './lib/apiClient';
 import { E2EE } from './lib/e2ee';
 import { Auth } from './components/auth/Auth';
@@ -104,12 +106,12 @@ function AppContent({ initialToken, initialUsername }: { initialToken: string, i
             const dateStr = now.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
 
             if (data.type === "Text" || data.type === "Encrypted" || data.type === "File") {
-                const senderId = data.from;
+                const targetChatId = data.from === myUsername ? data.to : data.from;
                 
                 // Keep track of whether we need to add the contact
-                if (senderId && !contactsRef.current.some(c => c.id === senderId)) {
+                if (targetChatId && targetChatId !== myUsername && !contactsRef.current.some(c => c.id === targetChatId)) {
                     if (ws.readyState === 1) {
-                        ws.send(JSON.stringify({ type: "WatchPresence", user_ids: [senderId] }));
+                        ws.send(JSON.stringify({ type: "WatchPresence", user_ids: [targetChatId] }));
                     }
                 }
 
@@ -135,26 +137,36 @@ function AppContent({ initialToken, initialUsername }: { initialToken: string, i
                             }
                         }
                         
-                        const newMsg: Message = { id: data.id || crypto.randomUUID(), senderId: data.from || 'unknown', type: "text", content: plaintext, time: timeStr, date: dateStr };
-                        setMessagesMap(prev => ({ ...prev, [senderId]: [...(prev[senderId] || []), newMsg] }));
+                        const msgId = data.id || crypto.randomUUID();
+                        const newMsg: Message = { id: msgId, senderId: data.from || 'unknown', type: "text", content: plaintext, time: timeStr, date: dateStr };
+                        setMessagesMap(prev => {
+                            const existing = prev[targetChatId] || [];
+                            if (existing.some(m => m.id === msgId)) return prev;
+                            return { ...prev, [targetChatId]: [...existing, newMsg] };
+                        });
                         
                         setContacts(prev => {
-                            if (!prev.some(c => c.id === senderId)) {
-                                return [...prev, { id: senderId, name: senderId, avatar: '', lastMessage: plaintext, timestamp: timeStr, online: true }];
+                            if (!prev.some(c => c.id === targetChatId)) {
+                                return [...prev, { id: targetChatId, name: targetChatId, avatar: '', lastMessage: plaintext, timestamp: timeStr, online: true }];
                             }
-                            return prev.map(c => c.id === senderId ? { ...c, lastMessage: plaintext, timestamp: timeStr } : c);
+                            return prev.map(c => c.id === targetChatId ? { ...c, lastMessage: plaintext, timestamp: timeStr } : c);
                         });
                     } catch (e) {
                         console.error("Failed to parse/decrypt incoming message", e);
                     }
                 } else if (data.type === "File") {
-                    const newMsg: Message = { id: data.id || crypto.randomUUID(), senderId: data.from || 'unknown', type: "file", fileData: { file_url: data.file_url, metadata: { name: data.file_name, type: data.mime_type, size: 0 } }, time: timeStr, date: dateStr };
-                    setMessagesMap(prev => ({ ...prev, [senderId]: [...(prev[senderId] || []), newMsg] }));
+                    const msgId = data.id || crypto.randomUUID();
+                    const newMsg: Message = { id: msgId, senderId: data.from || 'unknown', type: "file", fileData: { file_url: data.file_url, metadata: { name: data.file_name, type: data.mime_type, size: data.file_size || 0 } }, time: timeStr, date: dateStr };
+                    setMessagesMap(prev => {
+                        const existing = prev[targetChatId] || [];
+                        if (existing.some(m => m.id === msgId)) return prev;
+                        return { ...prev, [targetChatId]: [...existing, newMsg] };
+                    });
                     setContacts(prev => {
-                        if (!prev.some(c => c.id === senderId)) {
-                            return [...prev, { id: senderId, name: senderId, avatar: '', lastMessage: `[File] ${data.file_name}`, timestamp: timeStr, online: true }];
+                        if (!prev.some(c => c.id === targetChatId)) {
+                            return [...prev, { id: targetChatId, name: targetChatId, avatar: '', lastMessage: `[File] ${data.file_name}`, timestamp: timeStr, online: true }];
                         }
-                        return prev.map(c => c.id === senderId ? { ...c, lastMessage: `[File] ${data.file_name}`, timestamp: timeStr } : c);
+                        return prev.map(c => c.id === targetChatId ? { ...c, lastMessage: `[File] ${data.file_name}`, timestamp: timeStr } : c);
                     });
                 }
             } else if (data.type === "PresenceUpdate") {
@@ -274,6 +286,7 @@ function AppContent({ initialToken, initialUsername }: { initialToken: string, i
                 id: msgId,
                 file_name: file.name,
                 mime_type: file.type,
+                file_size: file.size,
                 file_url: presignData.download_url
             };
             wsRef.current.send(JSON.stringify(payload));
@@ -294,11 +307,23 @@ function AppContent({ initialToken, initialUsername }: { initialToken: string, i
     };
 
     const downloadDecryptedFile = async (fileUrl: string, metadata: { name: string; type: string }) => {
-        const decrypted = await getDecryptedFileData(fileUrl);
-        const blob = new Blob([decrypted], { type: metadata.type || "application/octet-stream" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a"); a.href = url; a.download = metadata.name || "download"; document.body.appendChild(a); a.click(); document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        try {
+            const decrypted = await getDecryptedFileData(fileUrl);
+            const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+            if (isTauri) {
+                const savePath = await save({ defaultPath: metadata.name || "download" });
+                if (savePath) {
+                    await writeFile(savePath, new Uint8Array(decrypted));
+                }
+            } else {
+                const blob = new Blob([decrypted], { type: metadata.type || "application/octet-stream" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a"); a.href = url; a.download = metadata.name || "download"; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }
+        } catch (e) {
+            console.error("Failed to download decrypted file", e);
+        }
     };
 
     const addContact = async (id: string) => {
@@ -374,7 +399,7 @@ function AppContent({ initialToken, initialUsername }: { initialToken: string, i
                     </>}
                 </div>
             </div>
-            <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} currentNickname={myNickname} onUpdateNickname={updateNickname} currentTheme={theme} onToggleTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')} onToggleLanguage={toggleLanguage} currentLanguage={language} t={t} />
+            <SettingsModal token={token || initialToken} isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} currentNickname={myNickname} onUpdateNickname={updateNickname} currentTheme={theme} onToggleTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')} onToggleLanguage={toggleLanguage} currentLanguage={language} t={t} />
         </>
     );
 }

@@ -66,13 +66,26 @@ export function FileMessage({ fileName, fileType, fileSize, fileUrl, onDecryptAn
         setDownloading(true);
         try {
             if (localPreviewUrl) {
-                // Если есть локальный URL, скачиваем по нему (просто создаём ссылку)
-                const a = document.createElement("a");
-                a.href = localPreviewUrl;
-                a.download = fileName;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
+                // Если есть локальный URL, скачиваем по нему через Tauri API если доступно
+                const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+                if (isTauri) {
+                    const { save } = await import('@tauri-apps/plugin-dialog');
+                    const { writeFile } = await import('@tauri-apps/plugin-fs');
+                    const savePath = await save({ defaultPath: fileName });
+                    if (savePath) {
+                        const res = await fetch(localPreviewUrl);
+                        const buffer = await res.arrayBuffer();
+                        await writeFile(savePath, new Uint8Array(buffer));
+                    }
+                } else {
+                    // Fallback to web download
+                    const a = document.createElement("a");
+                    a.href = localPreviewUrl;
+                    a.download = fileName;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                }
             } else {
                 await onDecryptAndDownload(fileUrl);
             }

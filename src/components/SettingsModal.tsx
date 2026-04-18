@@ -1,9 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { X, Sun, Moon, Languages } from "lucide-react";
+import { X, Sun, Moon, Languages, MonitorSmartphone } from "lucide-react";
+import { ApiClient } from "../lib/apiClient";
 
 interface SettingsModalProps {
+    token: string;
     isOpen: boolean;
     onClose: () => void;
     currentNickname: string;
@@ -15,7 +17,15 @@ interface SettingsModalProps {
     t: (key: string) => string;
 }
 
+interface Session {
+    id: string;
+    device: string;
+    lastActive: string;
+    isCurrent: boolean;
+}
+
 export function SettingsModal({
+    token,
     isOpen,
     onClose,
     currentNickname,
@@ -28,15 +38,43 @@ export function SettingsModal({
 }: SettingsModalProps) {
     const [nickname, setNickname] = useState(currentNickname);
     const [shouldRender, setShouldRender] = useState(false);
+    const [sessions, setSessions] = useState<Session[]>([]);
 
     useEffect(() => {
         if (isOpen) {
             setShouldRender(true);
+            
+            let currentSessionId = "";
+            try {
+                if (token) {
+                    const payload = JSON.parse(atob(token.split('.')[1]));
+                    currentSessionId = payload.session_id;
+                }
+            } catch (e) {
+                console.error("Failed to parse token", e);
+            }
+
+            if (token) {
+                ApiClient.getDevices(token)
+                    .then((data: any[]) => {
+                        setSessions(data.map(d => {
+                            const deviceStr = [d.device_name, d.device_model, d.platform]
+                                .filter(Boolean).join(' - ');
+                            return {
+                                id: d.device_id,
+                                device: deviceStr || 'Unknown Device',
+                                lastActive: new Date(d.created_at).toLocaleString(),
+                                isCurrent: d.device_id === currentSessionId
+                            };
+                        }));
+                    })
+                    .catch(console.error);
+            }
         } else {
             const timer = setTimeout(() => setShouldRender(false), 200);
             return () => clearTimeout(timer);
         }
-    }, [isOpen]);
+    }, [isOpen, token]);
 
     if (!shouldRender) return null;
 
@@ -45,6 +83,15 @@ export function SettingsModal({
             onUpdateNickname(nickname.trim());
         }
         onClose();
+    };
+
+    const handleTerminate = async (id: string) => {
+        try {
+            await ApiClient.deleteDevice(token, id);
+            setSessions(prev => prev.filter(s => s.id !== id));
+        } catch (error) {
+            console.error("Failed to terminate session", error);
+        }
     };
 
     return (
@@ -102,6 +149,30 @@ export function SettingsModal({
                             <Languages className="h-4 w-4" />
                             {currentLanguage === 'ru' ? 'English' : 'Русский'}
                         </button>
+                    </div>
+                    <div className="border-t pt-4">
+                        <label className="block text-sm font-medium mb-2">{t("sessionManagement")}</label>
+                        <div className="space-y-2 max-h-32 overflow-y-auto pr-1">
+                            {sessions.map(session => (
+                                <div key={session.id} className="flex items-center justify-between p-2 border rounded-md text-sm bg-muted/50">
+                                    <div className="flex items-center gap-2">
+                                        <MonitorSmartphone className="w-4 h-4 text-muted-foreground" />
+                                        <div className="flex flex-col">
+                                            <span className="font-medium">{session.device} {session.isCurrent && <span className="text-xs text-primary bg-primary/10 px-1.5 py-0.5 rounded ml-1">{t("currentSession")}</span>}</span>
+                                            <span className="text-xs text-muted-foreground">{session.lastActive}</span>
+                                        </div>
+                                    </div>
+                                    {!session.isCurrent && (
+                                        <button 
+                                            onClick={() => handleTerminate(session.id)}
+                                            className="text-red-500 hover:bg-red-500/10 px-2 py-1 rounded text-xs transition-colors"
+                                        >
+                                            {t("terminateSession")}
+                                        </button>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
                     </div>
                 </div>
             </div>
