@@ -9,17 +9,18 @@ import { ThemeProvider, useTheme } from 'next-themes';
 import { LanguageProvider, useLanguage } from './contexts/LanguageContext';
 import { ApiClient, WS_URL } from './lib/apiClient';
 import { E2EE } from './lib/e2ee';
+import { Auth } from './components/auth/Auth';
 import './styles/globals.css';
 
 const CONTACTS_STORAGE_KEY = "messenger_contacts";
 
 // ---------- Компонент ----------
-function AppContent() {
+function AppContent({ initialToken, initialUsername }: { initialToken: string, initialUsername: string }) {
     const { theme, setTheme } = useTheme();
     const { t, toggleLanguage, language } = useLanguage();
-    const [token, setToken] = useState<string | null>(null);
-    const [myDeviceId, setMyDeviceId] = useState<string | null>(null);
-    const [myNickname, setMyNickname] = useState<string>("");
+    const [token, setToken] = useState<string | null>(initialToken);
+    const [myUsername, setMyUsername] = useState<string | null>(initialUsername);
+    const [myNickname, setMyNickname] = useState<string>(initialUsername);
     const [recipientId, setRecipientId] = useState<string | null>(null);
     const [messagesMap, setMessagesMap] = useState<Record<string, Message[]>>({});
     const messages = recipientId ? (messagesMap[recipientId] || []) : [];
@@ -48,40 +49,8 @@ function AppContent() {
         initRef.current = true;
         
         const init = async () => {
-            const username = crypto.randomUUID().replace(/-/g, '').slice(0, 10);
-            const password = crypto.randomUUID();
-            
+            if (!initialToken || !initialUsername) return;
             try {
-                // Collect real device info
-                const userAgent = navigator.userAgent;
-                const platformInfo = navigator.platform || "Unknown";
-                const screenRes = `${window.screen.width}x${window.screen.height}`;
-                const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-                const rawHwid = `${userAgent}-${platformInfo}-${screenRes}-${timezone}`;
-                
-                // Hash hwid
-                const hwidBuffer = await window.crypto.subtle.digest("SHA-256", new TextEncoder().encode(rawHwid));
-                const hwidHash = Array.from(new Uint8Array(hwidBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
-
-                const isMobile = /Mobi|Android/i.test(userAgent);
-                let deviceModel = "Unknown Device";
-                if (/iPhone/i.test(userAgent)) deviceModel = "iPhone";
-                else if (/iPad/i.test(userAgent)) deviceModel = "iPad";
-                else if (/Android/i.test(userAgent)) deviceModel = "Android Device";
-                else if (/Windows/i.test(userAgent)) deviceModel = "Windows PC";
-                else if (/Mac/i.test(userAgent)) deviceModel = "Mac";
-                else if (/Linux/i.test(userAgent)) deviceModel = "Linux PC";
-                
-                const deviceName = isMobile ? `Mobile Browser (${deviceModel})` : `Web Browser (${deviceModel})`;
-
-                await ApiClient.register(username, password);
-                const jwtToken = await ApiClient.login(username, password, {
-                    device_name: deviceName,
-                    device_model: deviceModel,
-                    platform: platformInfo,
-                    hwid: hwidHash
-                });
-                
                 // Generate E2EE keys
                 const identity = await E2EE.generateIdentity();
                 const preKeys = await E2EE.generatePreKeys();
@@ -103,11 +72,11 @@ function AppContent() {
                     }))
                 };
 
-                await ApiClient.uploadKeys(jwtToken, uploadPayload);
+                await ApiClient.uploadKeys(initialToken, uploadPayload);
 
-                setToken(jwtToken);
-                setMyDeviceId(username);
-                setMyNickname(username);
+                setToken(initialToken);
+                setMyUsername(initialUsername);
+                setMyNickname(initialUsername);
             } catch (err) {
                 console.error("Init failed:", err);
             }
@@ -118,7 +87,7 @@ function AppContent() {
 
     // WebSocket 
     useEffect(() => {
-        if (!token || !myDeviceId) return;
+        if (!token || !myUsername) return;
         const ws = new WebSocket(`${WS_URL}?token=${token}`);
         ws.onopen = () => {
             console.log("WebSocket connected");
@@ -199,7 +168,7 @@ function AppContent() {
                 ws.close();
             }
         };
-    }, [token, myDeviceId, t]);
+    }, [token, myUsername, t]);
 
     
     const sendTextMessage = async (text: string) => {
@@ -270,7 +239,7 @@ function AppContent() {
             const now = new Date();
             const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             const dateStr = now.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
-            const newMsg: Message = { id: msgId, senderId: myDeviceId!, type: "text", content: text, time: timeStr, date: dateStr };
+            const newMsg: Message = { id: msgId, senderId: myUsername!, type: "text", content: text, time: timeStr, date: dateStr };
             setMessagesMap(prev => ({ ...prev, [recipientId]: [...(prev[recipientId] || []), newMsg] }));
             setContacts(prev => prev.map(c => c.id === recipientId ? { ...c, lastMessage: text, timestamp: timeStr } : c));
         } catch (err) { console.error(err); alert(t("sendFailed")); }
@@ -313,7 +282,7 @@ function AppContent() {
             const now = new Date();
             const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             const dateStr = now.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
-            const newMsg: Message = { id: msgId, senderId: myDeviceId!, type: "file", fileData: { file_url: presignData.download_url, metadata: { name: file.name, type: file.type, size: file.size } }, localPreviewUrl, time: timeStr, date: dateStr };
+            const newMsg: Message = { id: msgId, senderId: myUsername!, type: "file", fileData: { file_url: presignData.download_url, metadata: { name: file.name, type: file.type, size: file.size } }, localPreviewUrl, time: timeStr, date: dateStr };
             setMessagesMap(prev => ({ ...prev, [recipientId]: [...(prev[recipientId] || []), newMsg] }));
             setContacts(prev => prev.map(c => c.id === recipientId ? { ...c, lastMessage: `[File] ${file.name}`, timestamp: timeStr } : c));
         } catch (err) { console.error(err); alert(t("sendFailed")); }
@@ -333,7 +302,7 @@ function AppContent() {
     };
 
     const addContact = async (id: string) => {
-        if (!id.trim() || id === myDeviceId) return;
+        if (!id.trim() || id === myUsername) return;
         if (contacts.some(c => c.id === id)) { setRecipientId(id);  return; }
         
         const newContact: Contact = { id, name: id, avatar: '', lastMessage: '', timestamp: '', online: false };
@@ -350,13 +319,13 @@ function AppContent() {
     };
     const handleSelectContact = (contactId: string) => { setRecipientId(contactId);  };
     const updateNickname = async (newNickname: string) => {
-        if (!myDeviceId || !newNickname.trim()) return;
+        if (!myUsername || !newNickname.trim()) return;
         setMyNickname(newNickname.trim());
         // Need specific endpoint for nickname updates if it exists in API
     };
 
     const currentContact = recipientId ? contacts.find(c => c.id === recipientId) || null : null;
-    if (!myDeviceId) return <div className="flex items-center justify-center h-screen">{t("loading")}</div>;
+    if (!myUsername) return <div className="flex items-center justify-center h-screen">{t("loading")}</div>;
 
     return (
         <>
@@ -398,9 +367,9 @@ function AppContent() {
                     <ContactsSidebar contacts={contacts} selectedContactId={recipientId} onSelectContact={handleSelectContact} onDeleteContact={deleteContact} t={t} />
                 </div>
                 <div className="flex-1 flex flex-col min-w-0">
-                    <DeviceIdHeader deviceId={myDeviceId} nickname={myNickname} onOpenSettings={() => setIsSettingsOpen(true)} t={t} />
+                    <DeviceIdHeader username={myUsername} onOpenSettings={() => setIsSettingsOpen(true)} t={t} />
                     {!recipientId ? <div className="flex-1 flex items-center justify-center text-muted-foreground">{t("enterDeviceId")}</div> : <>
-                        <ChatArea contact={currentContact} messages={messages} currentUserId={myDeviceId} onDecryptAndDownloadFile={(fileUrl, metadata) => downloadDecryptedFile(fileUrl, metadata)} onDecryptAndGetFileData={(fileUrl) => getDecryptedFileData(fileUrl)} t={t} />
+                        <ChatArea contact={currentContact} messages={messages} currentUserId={myUsername} onDecryptAndDownloadFile={(fileUrl, metadata) => downloadDecryptedFile(fileUrl, metadata)} onDecryptAndGetFileData={(fileUrl) => getDecryptedFileData(fileUrl)} t={t} />
                         <MessageInput onSendMessage={sendTextMessage} onSendFile={sendFileMessage} disabled={!recipientId} t={t} />
                     </>}
                 </div>
@@ -411,10 +380,20 @@ function AppContent() {
 }
 
 function App() {
+    const [token, setToken] = useState<string | null>(null);
+    const [username, setUsername] = useState<string | null>(null);
+
     return (
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
             <LanguageProvider>
-                <AppContent />
+                {!token || !username ? (
+                    <Auth onLogin={(token, user) => {
+                        setToken(token);
+                        setUsername(user);
+                    }} />
+                ) : (
+                    <AppContent initialToken={token} initialUsername={username} />
+                )}
             </LanguageProvider>
         </ThemeProvider>
     );

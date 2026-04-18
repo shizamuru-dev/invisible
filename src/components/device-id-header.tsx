@@ -5,22 +5,21 @@ import { Button } from "@/components/ui/button";
 import { Copy, Check, Settings } from "lucide-react";
 
 interface DeviceIdHeaderProps {
-  deviceId: string;
-  nickname: string;
+  username: string;
   onOpenSettings: () => void;
   t: (key: string) => string;
 }
 
-export function DeviceIdHeader({ deviceId, nickname, onOpenSettings, t }: DeviceIdHeaderProps) {
+export function DeviceIdHeader({ username, onOpenSettings, t }: DeviceIdHeaderProps) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(deviceId);
+      await navigator.clipboard.writeText(username);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
-      console.error("Failed to copy device ID:", err);
+      console.error("Failed to copy username:", err);
     }
   };
 
@@ -28,13 +27,9 @@ export function DeviceIdHeader({ deviceId, nickname, onOpenSettings, t }: Device
     <header className="flex items-center justify-between border-b border-border bg-card px-6 py-3">
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-muted-foreground">{t("nickname")}:</span>
-          <span className="font-semibold">{nickname}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-muted-foreground">{t("deviceId")}:</span>
+          <span className="text-sm font-medium text-muted-foreground">{t("username") || "Username"}:</span>
           <code className="rounded-md bg-muted px-2 py-1 font-mono text-sm text-foreground">
-            {deviceId}
+            {username}
           </code>
         </div>
       </div>

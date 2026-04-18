@@ -21,7 +21,21 @@ export class ApiClient {
         });
 
         if (!res.ok) {
-            throw new Error(`API request failed: ${res.status} ${res.statusText}`);
+            let errMsg = res.statusText;
+            try {
+                const text = await res.clone().text();
+                if (text) {
+                    try {
+                        const errData = JSON.parse(text);
+                        if (errData.error) errMsg = errData.error;
+                        else if (errData.message) errMsg = errData.message;
+                        else errMsg = text;
+                    } catch {
+                        errMsg = text;
+                    }
+                }
+            } catch {}
+            throw new Error(errMsg);
         }
 
         if (res.status === 204) return null;
@@ -58,8 +72,8 @@ export class ApiClient {
     // Files
     static async presignFile(token: string, file_name: string, mime_type: string) {
         const query = new URLSearchParams({ file_name, mime_type }).toString();
-        const result = await this.request(`/files/presign?${query}`, "GET", null, token);
-        return result;
+        //const result = await this.request(`/files/presign?${query}`, "GET", null, token);
+        return await this.request(`/files/presign?${query}`, "GET", null, token);
     }
 
     // Secure Vault
