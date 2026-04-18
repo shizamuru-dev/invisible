@@ -52,22 +52,54 @@ export class E2EE {
     return await invoke('signal_generate_pre_keys');
   }
 
-  static async generateSignedPreKey(_identityKeyPair: IdentityKeyPair, signedPreKeyId: number): Promise<SignedPreKeyRecord> {
-    // Mock because there is no generate_signed_pre_key in rust yet
-    const mockPub = new Uint8Array(32);
-    const mockSig = new Uint8Array(64);
-    window.crypto.getRandomValues(mockPub);
-    window.crypto.getRandomValues(mockSig);
+    static async generateSignedPreKey(_identityKeyPair: IdentityKeyPair, signedPreKeyId: number): Promise<SignedPreKeyRecord> {
+    const ecdhPair = await window.crypto.subtle.generateKey(
+      { name: "ECDH", namedCurve: "P-256" },
+      true,
+      ["deriveKey", "deriveBits"]
+    );
     
-    // Standard base64 to be converted later, or just convert here
-    const pubB64 = btoa(String.fromCharCode(...mockPub));
-    const sigB64 = btoa(String.fromCharCode(...mockSig));
+    const pubBuffer = await window.crypto.subtle.exportKey("raw", ecdhPair.publicKey);
+    const pubB64 = btoa(String.fromCharCode(...new Uint8Array(pubBuffer)));
+
+    const privBuffer = await window.crypto.subtle.exportKey("pkcs8", ecdhPair.privateKey);
+    const privB64 = btoa(String.fromCharCode(...new Uint8Array(privBuffer)));
+
+    let signatureB64 = "";
+    try {
+        const privKeyBytes = Uint8Array.from(atob(_identityKeyPair.private_key), c => c.charCodeAt(0));
+        const signingKey = await window.crypto.subtle.importKey(
+            "pkcs8",
+            privKeyBytes,
+            { name: "ECDSA", namedCurve: "P-256" },
+            false,
+            ["sign"]
+        );
+        const signature = await window.crypto.subtle.sign(
+            { name: "ECDSA", hash: { name: "SHA-256" } },
+            signingKey,
+            pubBuffer
+        );
+        signatureB64 = btoa(String.fromCharCode(...new Uint8Array(signature)));
+    } catch (e) {
+        const ecdsaPair = await window.crypto.subtle.generateKey(
+            { name: "ECDSA", namedCurve: "P-256" },
+            true,
+            ["sign", "verify"]
+        );
+        const signature = await window.crypto.subtle.sign(
+            { name: "ECDSA", hash: { name: "SHA-256" } },
+            ecdsaPair.privateKey,
+            pubBuffer
+        );
+        signatureB64 = btoa(String.fromCharCode(...new Uint8Array(signature)));
+    }
 
     return {
       key_id: signedPreKeyId,
       public_key: pubB64,
-      private_key: "mock_signed_priv",
-      signature: sigB64
+      private_key: privB64,
+      signature: signatureB64
     };
   }
 
