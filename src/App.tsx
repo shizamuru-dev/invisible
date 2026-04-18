@@ -21,7 +21,8 @@ function AppContent() {
     const [myDeviceId, setMyDeviceId] = useState<string | null>(null);
     const [myNickname, setMyNickname] = useState<string>("");
     const [recipientId, setRecipientId] = useState<string | null>(null);
-    const [messages, setMessages] = useState<Message[]>([]);
+    const [messagesMap, setMessagesMap] = useState<Record<string, Message[]>>({});
+    const messages = recipientId ? (messagesMap[recipientId] || []) : [];
     const wsRef = useRef<WebSocket | null>(null);
     const [contacts, setContacts] = useState<Contact[]>([]);
     const contactsRef = useRef<Contact[]>([]);
@@ -165,10 +166,8 @@ function AppContent() {
                             }
                         }
                         
-                        if (senderId === recipientIdRef.current) {
-                            const newMsg: Message = { id: data.id || crypto.randomUUID(), senderId: data.from || 'unknown', type: "text", content: plaintext, time: timeStr, date: dateStr };
-                            setMessages(prev => [...prev, newMsg]);
-                        }
+                        const newMsg: Message = { id: data.id || crypto.randomUUID(), senderId: data.from || 'unknown', type: "text", content: plaintext, time: timeStr, date: dateStr };
+                        setMessagesMap(prev => ({ ...prev, [senderId]: [...(prev[senderId] || []), newMsg] }));
                         
                         setContacts(prev => {
                             if (!prev.some(c => c.id === senderId)) {
@@ -180,10 +179,8 @@ function AppContent() {
                         console.error("Failed to parse/decrypt incoming message", e);
                     }
                 } else if (data.type === "File") {
-                    if (senderId === recipientIdRef.current) {
-                        const newMsg: Message = { id: data.id || crypto.randomUUID(), senderId: data.from || 'unknown', type: "file", fileData: { file_url: data.file_url, metadata: { name: data.file_name, type: data.mime_type, size: 0 } }, time: timeStr, date: dateStr };
-                        setMessages(prev => [...prev, newMsg]);
-                    }
+                    const newMsg: Message = { id: data.id || crypto.randomUUID(), senderId: data.from || 'unknown', type: "file", fileData: { file_url: data.file_url, metadata: { name: data.file_name, type: data.mime_type, size: 0 } }, time: timeStr, date: dateStr };
+                    setMessagesMap(prev => ({ ...prev, [senderId]: [...(prev[senderId] || []), newMsg] }));
                     setContacts(prev => {
                         if (!prev.some(c => c.id === senderId)) {
                             return [...prev, { id: senderId, name: senderId, avatar: '', lastMessage: `[File] ${data.file_name}`, timestamp: timeStr, online: true }];
@@ -274,7 +271,7 @@ function AppContent() {
             const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             const dateStr = now.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
             const newMsg: Message = { id: msgId, senderId: myDeviceId!, type: "text", content: text, time: timeStr, date: dateStr };
-            setMessages(prev => [...prev, newMsg]);
+            setMessagesMap(prev => ({ ...prev, [recipientId]: [...(prev[recipientId] || []), newMsg] }));
             setContacts(prev => prev.map(c => c.id === recipientId ? { ...c, lastMessage: text, timestamp: timeStr } : c));
         } catch (err) { console.error(err); alert(t("sendFailed")); }
     };
@@ -310,7 +307,7 @@ function AppContent() {
             const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             const dateStr = now.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
             const newMsg: Message = { id: msgId, senderId: myDeviceId!, type: "file", fileData: { file_url: presignData.download_url, metadata: { name: file.name, type: file.type, size: file.size } }, localPreviewUrl, time: timeStr, date: dateStr };
-            setMessages(prev => [...prev, newMsg]);
+            setMessagesMap(prev => ({ ...prev, [recipientId]: [...(prev[recipientId] || []), newMsg] }));
             setContacts(prev => prev.map(c => c.id === recipientId ? { ...c, lastMessage: `[File] ${file.name}`, timestamp: timeStr } : c));
         } catch (err) { console.error(err); alert(t("sendFailed")); }
     };
@@ -333,10 +330,10 @@ function AppContent() {
 
     const addContact = async (id: string) => {
         if (!id.trim() || id === myDeviceId) return;
-        if (contacts.some(c => c.id === id)) { setRecipientId(id); setMessages([]); return; }
+        if (contacts.some(c => c.id === id)) { setRecipientId(id);  return; }
         
         const newContact: Contact = { id, name: id, avatar: '', lastMessage: '', timestamp: '', online: false };
-        setContacts(prev => [...prev, newContact]); setRecipientId(id); setMessages([]);
+        setContacts(prev => [...prev, newContact]); setRecipientId(id); 
         
         if (wsRef.current?.readyState === 1) {
             wsRef.current.send(JSON.stringify({ type: "WatchPresence", user_ids: [id] }));
@@ -345,9 +342,9 @@ function AppContent() {
 
     const deleteContact = (contactId: string) => {
         setContacts(prev => prev.filter(c => c.id !== contactId));
-        if (recipientId === contactId) { setRecipientId(null); setMessages([]); }
+        if (recipientId === contactId) { setRecipientId(null);  }
     };
-    const handleSelectContact = (contactId: string) => { setRecipientId(contactId); setMessages([]); };
+    const handleSelectContact = (contactId: string) => { setRecipientId(contactId);  };
     const updateNickname = async (newNickname: string) => {
         if (!myDeviceId || !newNickname.trim()) return;
         setMyNickname(newNickname.trim());
