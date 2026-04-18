@@ -137,9 +137,7 @@ function AppContent() {
                 const senderId = data.from;
                 
                 // Keep track of whether we need to add the contact
-                let isNewContact = false;
                 if (senderId && !contactsRef.current.some(c => c.id === senderId)) {
-                    isNewContact = true;
                     if (ws.readyState === 1) {
                         ws.send(JSON.stringify({ type: "WatchPresence", user_ids: [senderId] }));
                     }
