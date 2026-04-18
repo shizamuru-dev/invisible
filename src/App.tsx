@@ -320,9 +320,7 @@ function AppContent() {
     };
 
     const getDecryptedFileData = async (fileUrl: string): Promise<ArrayBuffer> => {
-        const res = await fetch(fileUrl, {
-            headers: token ? { "Authorization": `Bearer ${token}` } : {}
-        });
+        const res = await fetch(fileUrl);
         return res.arrayBuffer();
     };
 
