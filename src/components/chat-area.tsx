@@ -28,7 +28,7 @@ interface ChatAreaProps {
     contact: Contact | null;
     messages: Message[];
     currentUserId: string;
-    onDecryptAndDownloadFile: (fileUrl: string) => Promise<void>;
+    onDecryptAndDownloadFile: (fileUrl: string, metadata: { name: string; type: string }) => Promise<void>;
     onDecryptAndGetFileData: (fileUrl: string) => Promise<ArrayBuffer>;
     t: (key: string) => string;
 }
@@ -116,7 +116,7 @@ export function ChatArea({ contact, messages, currentUserId, onDecryptAndDownloa
                                                      fileType={message.fileData!.metadata.type}
                                                      fileSize={message.fileData!.metadata.size}
                                                      fileUrl={message.fileData!.file_url}
-                                                     onDecryptAndDownload={(fileUrl) => onDecryptAndDownloadFile(fileUrl)}
+                                                     onDecryptAndDownload={(fileUrl) => onDecryptAndDownloadFile(fileUrl, { name: message.fileData!.metadata.name, type: message.fileData!.metadata.type })}
                                                      onDecryptAndGetData={onDecryptAndGetFileData}
                                                      localPreviewUrl={message.localPreviewUrl}
                                                      t={t}

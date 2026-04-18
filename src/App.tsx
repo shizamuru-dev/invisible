@@ -285,10 +285,17 @@ function AppContent() {
             if (!presignData || !presignData.upload_url) throw new Error("Failed to get presign URL");
             
             // Upload file
-            await fetch(presignData.upload_url, {
+            const res = await fetch(presignData.upload_url, {
                 method: "PUT",
+                headers: {
+                    "Content-Type": file.type
+                },
                 body: file
             });
+            if (!res.ok) {
+                const text = await res.text();
+                throw new Error("Upload failed: " + text);
+            }
 
             // Send WS message
             const msgId = crypto.randomUUID();
@@ -312,19 +319,18 @@ function AppContent() {
         } catch (err) { console.error(err); alert(t("sendFailed")); }
     };
 
-    const getDecryptedFileData = async (fileData: any): Promise<ArrayBuffer> => {
-        // Return downloaded file as array buffer for now, bypass decrypt
-        const res = await fetch(fileData.file_url, {
+    const getDecryptedFileData = async (fileUrl: string): Promise<ArrayBuffer> => {
+        const res = await fetch(fileUrl, {
             headers: token ? { "Authorization": `Bearer ${token}` } : {}
         });
         return res.arrayBuffer();
     };
 
-    const downloadDecryptedFile = async (fileData: any, metadata: any) => {
-        const decrypted = await getDecryptedFileData(fileData);
+    const downloadDecryptedFile = async (fileUrl: string, metadata: { name: string; type: string }) => {
+        const decrypted = await getDecryptedFileData(fileUrl);
         const blob = new Blob([decrypted], { type: metadata.type || "application/octet-stream" });
         const url = URL.createObjectURL(blob);
-        const a = document.createElement("a"); a.href = url; a.download = metadata.name; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        const a = document.createElement("a"); a.href = url; a.download = metadata.name || "download"; document.body.appendChild(a); a.click(); document.body.removeChild(a);
         URL.revokeObjectURL(url);
     };
 
@@ -396,7 +402,7 @@ function AppContent() {
                 <div className="flex-1 flex flex-col min-w-0">
                     <DeviceIdHeader deviceId={myDeviceId} nickname={myNickname} onOpenSettings={() => setIsSettingsOpen(true)} t={t} />
                     {!recipientId ? <div className="flex-1 flex items-center justify-center text-muted-foreground">{t("enterDeviceId")}</div> : <>
-                        <ChatArea contact={currentContact} messages={messages} currentUserId={myDeviceId} onDecryptAndDownloadFile={(fileUrl) => downloadDecryptedFile(fileUrl, {} as any)} onDecryptAndGetFileData={(fileUrl) => getDecryptedFileData(fileUrl)} t={t} />
+                        <ChatArea contact={currentContact} messages={messages} currentUserId={myDeviceId} onDecryptAndDownloadFile={(fileUrl, metadata) => downloadDecryptedFile(fileUrl, metadata)} onDecryptAndGetFileData={(fileUrl) => getDecryptedFileData(fileUrl)} t={t} />
                         <MessageInput onSendMessage={sendTextMessage} onSendFile={sendFileMessage} disabled={!recipientId} t={t} />
                     </>}
                 </div>
