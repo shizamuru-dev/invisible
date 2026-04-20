@@ -1,0 +1,12 @@
+.vs
+node_modules
+AGENTS.md
+api.md
+AUTH.md
+CLIENT_GUIDE.md
+overview.md
+.kilo
+.idea
+Caddyfile
+docker-compose.yml
+session-*
