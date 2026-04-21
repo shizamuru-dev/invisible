@@ -10,3 +10,4 @@ overview.md
 Caddyfile
 docker-compose.yml
 session-*
+MessengerServer/
