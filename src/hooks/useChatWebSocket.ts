@@ -21,8 +21,13 @@ export function useChatWebSocket({
 
     useEffect(() => {
         if (!token || !myUsername) return;
+        let isMounted = true;
         const ws = new WebSocket(`${WS_URL}?token=${token}`);
         ws.onopen = () => {
+            if (!isMounted) {
+                ws.close();
+                return;
+            }
             console.log("WebSocket connected");
             const currentContacts = contactsRef.current;
             if (currentContacts.length > 0) {
@@ -31,6 +36,7 @@ export function useChatWebSocket({
         };
         
         ws.onmessage = async (event) => {
+            if (!isMounted) return;
             const data = JSON.parse(event.data);
             const now = new Date();
             const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -106,7 +112,8 @@ export function useChatWebSocket({
 
         wsRef.current = ws;
         return () => {
-            if (ws.readyState === 1) {
+            isMounted = false;
+            if (ws.readyState === 1 || ws.readyState === 0) {
                 ws.close();
             }
         };

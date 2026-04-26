@@ -1,13 +1,14 @@
 import { useState, useEffect, useRef } from "react";
 import { Download, File, Film, FileText, Music, Image as ImageIcon, X, Play, Pause } from "lucide-react";
+import { base64ToArrayBuffer, EncryptedPackage } from "../lib/crypto";
 
 interface FileMessageProps {
     fileName: string;
     fileType: string;
     fileSize: number;
-    encryptedData: any;
-    onDecryptAndDownload: (encryptedData: any, metadata: any) => Promise<void>;  // теперь 2 аргумента
-    onDecryptAndGetData: (encryptedData: any) => Promise<ArrayBuffer>;
+    encryptedData: EncryptedPackage;
+    onDecryptAndDownload: (encryptedData: EncryptedPackage, metadata: any) => Promise<void>;
+    onDecryptAndGetData: (encryptedData: EncryptedPackage) => Promise<ArrayBuffer>;
     localPreviewUrl?: string | null;
     metadata?: any;
 }
@@ -42,7 +43,12 @@ export function FileMessage({
             setLoadingPreview(true);
             if (metadata?.unencrypted) {
                 const ciphertext = encryptedData.ciphertext;
-                if (ciphertext && Array.isArray(ciphertext) && ciphertext.length > 0) {
+                if (ciphertext && typeof ciphertext === "string" && ciphertext.length > 0) {
+                    const buffer = base64ToArrayBuffer(ciphertext);
+                    const blob = new Blob([buffer], { type: fileType });
+                    const url = URL.createObjectURL(blob);
+                    setAudioUrl(url);
+                } else if (ciphertext && Array.isArray(ciphertext) && ciphertext.length > 0) {
                     const buffer = new Uint8Array(ciphertext).buffer;
                     const blob = new Blob([buffer], { type: fileType });
                     const url = URL.createObjectURL(blob);

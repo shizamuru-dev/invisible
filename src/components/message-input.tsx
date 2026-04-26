@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
 import { Send, Paperclip, Mic, Square } from "lucide-react";
 
 interface MessageInputProps {
@@ -24,7 +24,7 @@ export function MessageInput({ onSendMessage, onSendFile, onTyping, disabled, t 
     const typingDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const lastTypingSentRef = useRef<number>(0);
 
-    const handleTyping = (value: string) => {
+    const handleTyping = useCallback((value: string) => {
         setMessage(value);
         if (!onTyping) return;
 
@@ -45,9 +45,9 @@ export function MessageInput({ onSendMessage, onSendFile, onTyping, disabled, t 
         typingTimerRef.current = setTimeout(() => {
             // Ничего не делаем, таймер только для сброса через 3 секунды на стороне получателя
         }, 3000);
-    };
+    }, [onTyping]);
 
-    const handleFile = async (file: File) => {
+    const handleFile = useCallback(async (file: File) => {
         if (disabled || isSendingRef.current) return;
         isSendingRef.current = true;
         setUploading(true);
@@ -59,9 +59,9 @@ export function MessageInput({ onSendMessage, onSendFile, onTyping, disabled, t 
             setUploading(false);
             isSendingRef.current = false;
         }
-    };
+    }, [disabled, onSendFile]);
 
-    const handlePaste = (e: React.ClipboardEvent) => {
+    const handlePaste = useCallback((e: React.ClipboardEvent) => {
         if (disabled) return;
         const items = e.clipboardData?.items;
         if (!items) return;
@@ -75,26 +75,26 @@ export function MessageInput({ onSendMessage, onSendFile, onTyping, disabled, t 
                 }
             }
         }
-    };
+    }, [disabled, handleFile]);
 
-    const handleDragOver = (e: React.DragEvent) => {
+    const handleDragOver = useCallback((e: React.DragEvent) => {
         if (disabled) return;
         e.preventDefault();
         setIsDragOver(true);
-    };
-    const handleDragLeave = (e: React.DragEvent) => {
+    }, [disabled]);
+    const handleDragLeave = useCallback((e: React.DragEvent) => {
         e.preventDefault();
         setIsDragOver(false);
-    };
-    const handleDrop = (e: React.DragEvent) => {
+    }, []);
+    const handleDrop = useCallback((e: React.DragEvent) => {
         if (disabled) return;
         e.preventDefault();
         setIsDragOver(false);
         const files = e.dataTransfer?.files;
         if (files && files.length) handleFile(files[0]);
-    };
+    }, [disabled, handleFile]);
 
-    const startRecording = async () => {
+    const startRecording = useCallback(async () => {
         if (disabled || isRecording) return;
         if (onTyping) onTyping('recording');
         try {
@@ -129,19 +129,19 @@ export function MessageInput({ onSendMessage, onSendFile, onTyping, disabled, t 
             console.error("Microphone access denied", err);
             alert(t("microphoneError") || "Не удалось получить доступ к микрофону");
         }
-    };
+    }, [disabled, isRecording, onTyping, handleFile, t]);
 
-    const stopRecording = () => {
+    const stopRecording = useCallback(() => {
         if (mediaRecorderRef.current && isRecording) mediaRecorderRef.current.stop();
-    };
+    }, [isRecording]);
 
-    const handleSubmit = () => {
+    const handleSubmit = useCallback(() => {
         if (disabled) return;
         if (message.trim() && !uploading && !isRecording) {
             onSendMessage(message.trim());
             setMessage("");
         }
-    };
+    }, [disabled, message, uploading, isRecording, onSendMessage]);
 
     return (
         <div

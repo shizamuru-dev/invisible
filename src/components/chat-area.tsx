@@ -5,6 +5,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 import type { Contact } from "./contacts-sidebar";
 import { FileMessage } from "./FileMessage";
+import { EncryptedPackage } from "../lib/crypto";
 
 export interface Message {
     id: string;
@@ -12,12 +13,13 @@ export interface Message {
     type: "text" | "file";
     content?: string;
     fileData?: {
-        encrypted: any;
+        encrypted?: EncryptedPackage;
         metadata: {
             name: string;
             type: string;
             size: number;
         };
+        file_url?: string;
     };
     localPreviewUrl?: string;
     time: string;
@@ -28,8 +30,8 @@ interface ChatAreaProps {
     contact: (Contact & { action?: string }) | null;
     messages: Message[];
     currentUserId: string;
-    onDecryptAndDownloadFile: (encryptedData: any, metadata: any) => Promise<void>;
-    onDecryptAndGetFileData: (encryptedData: any) => Promise<ArrayBuffer>;
+    onDecryptAndDownloadFile: (encryptedData: EncryptedPackage, metadata: any) => Promise<void>;
+    onDecryptAndGetFileData: (encryptedData: EncryptedPackage) => Promise<ArrayBuffer>;
     t: (key: string) => string;
 }
 
@@ -131,7 +133,7 @@ export function ChatArea({ contact, messages, currentUserId, onDecryptAndDownloa
                                                         fileName={message.fileData!.metadata.name}
                                                         fileType={message.fileData!.metadata.type}
                                                         fileSize={message.fileData!.metadata.size}
-                                                        encryptedData={message.fileData!.encrypted}
+                                                        encryptedData={message.fileData!.encrypted!}
                                                         onDecryptAndDownload={onDecryptAndDownloadFile}
                                                         onDecryptAndGetData={onDecryptAndGetFileData}
                                                         localPreviewUrl={message.localPreviewUrl}

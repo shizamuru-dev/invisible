@@ -1,7 +1,15 @@
 import { useState, useEffect } from "react";
 import { Copy, Check, Settings } from "lucide-react";
 
-export function DeviceIdHeader({ deviceId, nickname, avatar, onOpenSettings, t }) {
+export interface DeviceIdHeaderProps {
+    deviceId: string;
+    nickname: string;
+    avatar?: string | null;
+    onOpenSettings: () => void;
+    t: (key: string) => string;
+}
+
+export function DeviceIdHeader({ deviceId, nickname, avatar, onOpenSettings, t }: DeviceIdHeaderProps) {
     const [copied, setCopied] = useState(false);
     const [localAvatar, setLocalAvatar] = useState(avatar);
 

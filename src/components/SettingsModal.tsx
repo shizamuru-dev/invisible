@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { X, Sun, Moon, Languages, LogOut, Upload, UserX, UserCheck, RefreshCw } from "lucide-react";
+import { X, Sun, Moon, Languages, LogOut, Upload, UserX, UserCheck, RefreshCw, Download, FileUp } from "lucide-react";
 import { MyServerApi as ApiClient } from "../lib/apiClient";
 
 interface SettingsModalProps {
@@ -17,6 +17,8 @@ interface SettingsModalProps {
     blockedList: string[];
     onUnblock: (userId: string) => Promise<void>;
     onSwitchMode: () => void; // новый проп
+    onExportKeys?: (password: string) => void;
+    onImportKeys?: (file: File, password: string) => void;
     t: (key: string) => string;
     compressImage: (file: File) => Promise<string>;
 }
@@ -36,6 +38,8 @@ export function SettingsModal({
     blockedList,
     onUnblock,
     onSwitchMode,
+    onExportKeys,
+    onImportKeys,
     t,
     compressImage,
 }: SettingsModalProps) {
@@ -43,6 +47,9 @@ export function SettingsModal({
     const [shouldRender, setShouldRender] = useState(false);
     const [localAvatar, setLocalAvatar] = useState(avatar);
     const [blockedDetails, setBlockedDetails] = useState<{ id: string; name: string }[]>([]);
+    
+    const [passwordPrompt, setPasswordPrompt] = useState<{type: 'export', action: (password: string) => void} | {type: 'import', file: File, action: (password: string) => void} | null>(null);
+    const [password, setPassword] = useState('');
 
     useEffect(() => {
         if (isOpen) setShouldRender(true);
@@ -98,6 +105,22 @@ export function SettingsModal({
     const handleUnblock = async (userId: string) => {
         await onUnblock(userId);
         setBlockedDetails(prev => prev.filter(b => b.id !== userId));
+    };
+
+    const handleExportKeysClick = () => {
+        if (onExportKeys) {
+            setPasswordPrompt({ type: 'export', action: onExportKeys });
+        }
+    };
+
+    const handleImportKeysChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file && onImportKeys) {
+            setPasswordPrompt({ type: 'import', file, action: (password) => onImportKeys(file, password) });
+        }
+        if (e.target) {
+            e.target.value = '';
+        }
     };
 
     return (
@@ -157,6 +180,18 @@ export function SettingsModal({
                         )}
                     </div>
                     <div className="border-t pt-4">
+                        <label className="block text-sm font-medium mb-2">{t("backupKeys") || "Backup Keys"}</label>
+                        <div className="flex flex-col gap-2">
+                            <button onClick={handleExportKeysClick} className="flex items-center justify-center gap-2 px-4 py-2 border rounded-md hover:bg-muted text-sm">
+                                <Download className="h-4 w-4" /> {t("exportKeys") || "Export Keys"}
+                            </button>
+                            <label className="flex items-center justify-center gap-2 px-4 py-2 border rounded-md hover:bg-muted text-sm cursor-pointer">
+                                <FileUp className="h-4 w-4" /> {t("importKeys") || "Import Keys"}
+                                <input type="file" accept=".json" onChange={handleImportKeysChange} className="hidden" />
+                            </label>
+                        </div>
+                    </div>
+                    <div className="border-t pt-4">
                         <button onClick={onLogout} className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 transition-colors">
                             <LogOut className="h-4 w-4" /> {t("logout")}
                         </button>
@@ -166,6 +201,37 @@ export function SettingsModal({
                     </div>
                 </div>
             </div>
+            
+            {passwordPrompt && (
+                <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 rounded-lg">
+                    <div className="bg-background p-4 rounded-md shadow-lg w-11/12 max-w-sm" onClick={(e) => e.stopPropagation()}>
+                        <h3 className="text-lg font-semibold mb-2">
+                            {passwordPrompt.type === 'export' ? t("enterExportPassword") : t("enterImportPassword")}
+                        </h3>
+                        <input 
+                            type="password" 
+                            value={password} 
+                            onChange={(e) => setPassword(e.target.value)} 
+                            className="w-full px-3 py-2 border rounded-md mb-4 bg-background" 
+                            placeholder={t("password") || "Password"} 
+                            autoFocus
+                        />
+                        <div className="flex justify-end gap-2">
+                            <button onClick={() => { setPasswordPrompt(null); setPassword(''); }} className="px-3 py-1.5 border rounded-md hover:bg-muted text-sm">
+                                {t("cancel") || "Cancel"}
+                            </button>
+                            <button onClick={() => {
+                                if (!password) return;
+                                passwordPrompt.action(password);
+                                setPasswordPrompt(null);
+                                setPassword('');
+                            }} className="px-3 py-1.5 bg-blue-500 text-white rounded-md hover:bg-blue-600 text-sm">
+                                {t("confirm") || "Confirm"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

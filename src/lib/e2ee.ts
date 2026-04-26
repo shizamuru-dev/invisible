@@ -82,17 +82,8 @@ export class E2EE {
         );
         signatureB64 = btoa(String.fromCharCode(...new Uint8Array(signature)));
     } catch (e) {
-        const ecdsaPair = await window.crypto.subtle.generateKey(
-            { name: "ECDSA", namedCurve: "P-256" },
-            true,
-            ["sign", "verify"]
-        );
-        const signature = await window.crypto.subtle.sign(
-            { name: "ECDSA", hash: { name: "SHA-256" } },
-            ecdsaPair.privateKey,
-            pubBuffer
-        );
-        signatureB64 = btoa(String.fromCharCode(...new Uint8Array(signature)));
+        console.error("Failed to sign pre-key with identity key:", e);
+        throw new Error(`Failed to sign pre-key: ${e instanceof Error ? e.message : String(e)}`);
     }
 
     return {

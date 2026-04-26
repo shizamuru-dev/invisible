@@ -11,6 +11,7 @@ export function useE2EEInit(initialToken: string, initialUsername: string) {
     useEffect(() => {
         if (initRef.current) return;
         initRef.current = true;
+        let isMounted = true;
         
         const init = async () => {
             if (!initialToken || !initialUsername) return;
@@ -37,15 +38,18 @@ export function useE2EEInit(initialToken: string, initialUsername: string) {
 
                 await ApiClient.uploadKeys(initialToken, uploadPayload);
 
-                setToken(initialToken);
-                setMyUsername(initialUsername);
-                setMyNickname(initialUsername);
+                if (isMounted) {
+                    setToken(initialToken);
+                    setMyUsername(initialUsername);
+                    setMyNickname(initialUsername);
+                }
             } catch (err) {
                 console.error("Init failed:", err);
             }
         };
 
         init();
+        return () => { isMounted = false; };
     }, [initialToken, initialUsername]);
 
     return { token, setToken, myUsername, setMyUsername, myNickname, setMyNickname };
